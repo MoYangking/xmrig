@@ -1,0 +1,120 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux x64
+    runs-on: ubuntu-22.04
+    env:
+      XMRIG_DEPS: ${{ github.workspace }}/deps
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            autoconf automake libtool pkg-config \
+            wget tar perl python3
+
+      - name: Cache third-party deps
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/build.*.sh') }}
+
+      - name: Build third-party deps (libuv, hwloc, OpenSSL)
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: |
+          bash scripts/build_deps.sh
+
+      - name: Configure (CPU-only)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DXMRIG_DEPS="${XMRIG_DEPS}" \
+            -DBUILD_STATIC=ON \
+            -DWITH_OPENCL=OFF -DWITH_CUDA=OFF -DWITH_NVML=OFF -DWITH_ADL=OFF
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xmrig-linux-x64
+          path: build/xmrig
+
+  windows-mingw:
+    name: Windows x64 (MSYS2, Win7-compatible)
+    runs-on: windows-2022
+    env:
+      MSYS2_PATH_TYPE: minimal
+      CHERE_INVOKING: 1
+      XMRIG_DEPS: ${{ github.workspace }}/deps
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSYS2 (MINGW64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            wget
+            tar
+            perl
+            git
+            python3
+
+      - name: Cache third-party deps
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/build.*.sh') }}
+
+      - name: Build third-party deps (libuv, hwloc, OpenSSL)
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: |
+          bash scripts/build_deps.sh
+
+      - name: Configure (CPU-only, Win7 target)
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DXMRIG_DEPS="$PWD/deps" \
+            -DBUILD_STATIC=ON \
+            -DWITH_OPENCL=OFF -DWITH_CUDA=OFF -DWITH_NVML=OFF -DWITH_ADL=OFF \
+            -DCMAKE_C_FLAGS="-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DNTDDI_VERSION=0x06010000" \
+            -DCMAKE_CXX_FLAGS="-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DNTDDI_VERSION=0x06010000"
+
+      - name: Build
+        shell: msys2 {0}
+        run: cmake --build build --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xmrig-windows7-x64
+          path: build/xmrig.exe
+
