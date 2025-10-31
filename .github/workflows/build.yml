@@ -38,23 +38,25 @@ jobs:
       - name: Build third-party deps (libuv, hwloc, OpenSSL)
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
-          bash scripts/build_deps.sh
+          bash scripts/build.uv.sh
+          bash scripts/build.hwloc.sh
+          bash scripts/build.openssl3.sh
 
       - name: Configure (CPU-only)
         run: |
-          cmake -S . -B build -G Ninja \
+          cmake -S . -B build-xmrig -G Ninja \
             -DXMRIG_DEPS="${XMRIG_DEPS}" \
             -DBUILD_STATIC=ON \
             -DWITH_OPENCL=OFF -DWITH_CUDA=OFF -DWITH_NVML=OFF -DWITH_ADL=OFF
 
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build-xmrig --config Release
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: xmrig-linux-x64
-          path: build/xmrig
+          path: build-xmrig/xmrig
 
   windows-mingw:
     name: Windows x64 (MSYS2, Win7-compatible)
@@ -96,12 +98,14 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
         shell: msys2 {0}
         run: |
-          bash scripts/build_deps.sh
+          bash scripts/build.uv.sh
+          bash scripts/build.hwloc.sh
+          bash scripts/build.openssl3.sh
 
       - name: Configure (CPU-only, Win7 target)
         shell: msys2 {0}
         run: |
-          cmake -S . -B build -G Ninja \
+          cmake -S . -B build-xmrig -G Ninja \
             -DXMRIG_DEPS="$PWD/deps" \
             -DBUILD_STATIC=ON \
             -DWITH_OPENCL=OFF -DWITH_CUDA=OFF -DWITH_NVML=OFF -DWITH_ADL=OFF \
@@ -110,11 +114,10 @@ jobs:
 
       - name: Build
         shell: msys2 {0}
-        run: cmake --build build --config Release
+        run: cmake --build build-xmrig --config Release
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: xmrig-windows7-x64
-          path: build/xmrig.exe
-
+          path: build-xmrig/xmrig.exe
